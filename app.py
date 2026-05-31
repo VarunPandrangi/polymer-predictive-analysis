@@ -34,7 +34,12 @@ def isolate_time_series(row, columns):
                 timeline[match.group(1)] = float(row[col])
             except ValueError:
                 continue
-    return timeline
+    # Ensure chronological sorting
+    sorted_timeline = dict(sorted(
+        timeline.items(),
+        key=lambda item: pd.to_datetime(item[0], format='%d.%m.%Y')
+    ))
+    return sorted_timeline
 
 def calculate_significant_shifts(timeline, threshold):
     dates = list(timeline.keys())
@@ -66,7 +71,7 @@ def calculate_statistical_forecast(timeline):
     df_ts = df_ts.set_index('Date')
     
     # Resample to monthly to regularize the time series
-    ts_monthly = df_ts['Price'].resample('M').last().fillna(method='ffill')
+    ts_monthly = df_ts['Price'].resample('ME').last().ffill()
     
     if len(ts_monthly) < 3:
         return {"1_month_math": ts_monthly.iloc[-1], "3_month_math": ts_monthly.iloc[-1], "status": "Insufficient data for trend, returning flatlined."}
@@ -124,7 +129,10 @@ def query_deepseek_analysis(material_name, timeline, shifts, math_forecast):
         
         raw_output = response.choices[0].message.content.strip()
         if raw_output.startswith("```json"):
-            raw_output = raw_output[7:-3].strip()
+            raw_output = raw_output[7:]
+            if raw_output.endswith("```"):
+                raw_output = raw_output[:-3]
+            raw_output = raw_output.strip()
             
         return json.loads(raw_output)
     except Exception as e:
@@ -200,8 +208,13 @@ if uploaded_file:
                 c1, c2, c3 = st.columns(3)
                 last_price = df_chart['Price'].iloc[-1]
                 c1.metric("Last Recorded Price", f"₹{last_price:.2f}")
-                c2.metric("Statistical Baseline (1M)", f"₹{math_forecast['1_month_math']:.2f}")
-                c3.metric("AI Macro-Adjusted (1M)", f"₹{result.get('final_adjusted_1M', 0):.2f}")
+                c2.metric("Statistical Baseline (1M)", f"₹{math_forecast.get('1_month_math', 0):.2f}")
+                
+                try:
+                    ai_1m = float(result.get('final_adjusted_1M', 0))
+                except (ValueError, TypeError):
+                    ai_1m = 0.0
+                c3.metric("AI Macro-Adjusted (1M)", f"₹{ai_1m:.2f}")
 
                 st.markdown("### Market Audit & Synthesis")
                 st.info(f"**Historical Volatility Drivers:**\n{result.get('macro_correlations', 'N/A')}")
