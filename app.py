@@ -151,7 +151,12 @@ if uploaded_file:
         selected_category = st.selectbox("1. Select Material Category (Sheet)", list(sheets_dict.keys()))
         df_selected = sheets_dict[selected_category]
         
-        name_col = next((col for col in df_selected.columns if 'name' in str(col).lower() or 'description' in str(col).lower() or 'material' in str(col).lower()), None)
+        # Prioritize description or name over simple material ID
+        name_col = next((col for col in df_selected.columns if 'description' in str(col).lower()), None)
+        if not name_col:
+            name_col = next((col for col in df_selected.columns if 'name' in str(col).lower()), None)
+        if not name_col:
+            name_col = next((col for col in df_selected.columns if 'material' in str(col).lower()), None)
         
         if not name_col:
             st.error("Matrix layout invalid: Missing material description column.")
